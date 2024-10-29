@@ -3,6 +3,6 @@ export default {
   schema: "./utils/schema.js",
   dialect: 'postgresql',
   dbCredentials: {
-    url: NEXT_PUBLIC_DRIZZLE_DB_URL,
+    url: "postgresql://ai-interview-mockup_owner:mvS4XwM5WVsI@ep-royal-shadow-a5marznp.us-east-2.aws.neon.tech/ai-interview-mockup?sslmode=require",
   }
 };

@@ -8,6 +8,7 @@ import React, { useEffect, useState, useRef } from "react";
 import Webcam from "react-webcam";
 import * as faceapi from "face-api.js";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 const Interview = ({ params }) => {
   const [interviewData, setInterviewData] = useState([]);
@@ -55,15 +56,10 @@ const Interview = ({ params }) => {
           .withFaceLandmarks()
           .withFaceExpressions();
 
-        // Log the detection result for inspection
-        // console.log("Detections:", detections);
-
-        // Check if face is detected and bounding box is valid
         if (detections && detections.detection && detections.detection.box) {
           const canvas = canvasRef.current;
           const context = canvas.getContext("2d");
 
-          // Clear the canvas before drawing
           context.clearRect(0, 0, videoWidth, videoHeight);
 
           const resizedDetections = faceapi.resizeResults(detections, {
@@ -79,7 +75,6 @@ const Interview = ({ params }) => {
           faceapi.draw.drawDetections(canvas, resizedDetections);
           faceapi.draw.drawFaceExpressions(canvas, resizedDetections);
 
-          // Update state with detected expressions
           setExpressions(detections.expressions);
         } else {
           console.warn("No face detected or bounding box is invalid.");
@@ -102,26 +97,21 @@ const Interview = ({ params }) => {
     }
   }, [webcamEnabled, modelsLoaded]);
 
-  // Stop webcam and navigate when "Start Interview" is clicked
   const handleStartInterview = () => {
-    // setWebcamEnabled(false); // Turn off webcam
-    router.push(`${params.InterviewId}/start`); // Navigate to the interview start
+    router.push(`${params.InterviewId}/start`);
   };
 
   return (
     <div className="my-10">
       <h1 className="font-bold text-2xl">Let's get Started</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        {/* Left side: Interview Details */}
         <div className="flex flex-col my-5 gap-5">
           <div className="flex flex-col p-5 rounded-lg border gap-5">
             <h2 className="text-lg">
-              <strong>Job Role/Job position:</strong>{" "}
-              {interviewData.jobPosition}
+              <strong>Job Role/Job position:</strong> {interviewData.jobPosition}
             </h2>
             <h2 className="text-lg">
-              <strong>Job Description/TechStack:</strong>{" "}
-              {interviewData.jobDesc}
+              <strong>Job Description/TechStack:</strong> {interviewData.jobDesc}
             </h2>
             <h2 className="text-lg">
               <strong>Years of Experience:</strong> {interviewData.jobExper}
@@ -138,47 +128,37 @@ const Interview = ({ params }) => {
           </div>
         </div>
 
-        {/* Right side: Webcam and Facial Expression Detection */}
         <div className="flex flex-col items-center justify-center">
           {webcamEnabled ? (
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                maxWidth: 500,
-                height: "auto",
-                aspectRatio: 16 / 9,
-              }}
-            >
+            <div className="flex flex-col mt-10 justify-center items-center bg-slate-900 rounded-lg pt-1 pb-1 pr-1 pl-1 relative">
+              {!webcamEnabled && (
+                <Image
+                  src={"/webcam.png"}
+                  width={200}
+                  height={200}
+                  alt="webcam"
+                  className="absolute"
+                />
+              )}
               <Webcam
                 ref={webcamRef}
+                mirrored={true}
+                style={{
+                  zIndex: 1,
+                  height: 300,
+                  width: "100%",
+                  position: "relative",
+                }}
                 onUserMedia={() => setWebcamEnabled(true)}
                 onUserMediaError={() => setWebcamEnabled(false)}
-                mirrored={true}
-                videoConstraints={{
-                  width: 650,
-                  height: 360,
-                  facingMode: "user",
-                }}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
-                  zIndex: 1,
-                }}
-                className="rounded-lg border-4 border-black"
               />
               <canvas
                 ref={canvasRef}
                 style={{
                   position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
                   zIndex: 2,
+                  height: 300,
+                  width: "100%",
                 }}
               />
             </div>
@@ -198,7 +178,6 @@ const Interview = ({ params }) => {
         </div>
       </div>
 
-      {/* Start Interview Button */}
       <div className="flex justify-end items-end">
         <Button className="my-5" onClick={handleStartInterview}>
           Start Interview

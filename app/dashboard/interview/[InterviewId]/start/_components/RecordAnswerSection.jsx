@@ -13,7 +13,7 @@ import { UserAnswers } from "@/utils/schema";
 import { useUser } from "@clerk/nextjs";
 import moment from "moment";
 import { eq } from "drizzle-orm";
-import * as faceapi from "face-api.js"; // Import face-api.js
+import * as faceapi from "face-api.js";
 
 const RecordAnswerSection = ({
   mockInterviewQuestions,
@@ -24,7 +24,7 @@ const RecordAnswerSection = ({
   const [loading, setLoading] = useState(false);
   const [webcamActive, setWebcamActive] = useState(false);
   const [expressions, setExpressions] = useState({});
-  const [modelsLoaded, setModelsLoaded] = useState(false); // Track model loading
+  const [modelsLoaded, setModelsLoaded] = useState(false);
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
   const { user } = useUser();
@@ -42,7 +42,6 @@ const RecordAnswerSection = ({
     useLegacyResults: false,
   });
 
-  // Load face-api.js models
   const loadModels = async () => {
     const MODEL_URL = "/models";
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
@@ -52,13 +51,19 @@ const RecordAnswerSection = ({
   };
 
   useEffect(() => {
-    loadModels(); // Load the models when the component is mounted
+    loadModels();
   }, []);
 
+  // Update userAnswer without repeating phrases
   useEffect(() => {
-    results.map((result) =>
-      setUserAnswer((prevAns) => prevAns + result?.transcript)
-    );
+    if (results.length > 0) {
+      const latestTranscript = results[results.length - 1]?.transcript || "";
+      setUserAnswer((prevAns) => {
+        return prevAns.endsWith(latestTranscript)
+          ? prevAns
+          : prevAns + latestTranscript;
+      });
+    }
   }, [results]);
 
   useEffect(() => {
@@ -67,43 +72,38 @@ const RecordAnswerSection = ({
     }
   }, [userAnswer]);
 
-  // Detect facial expressions
   const detectExpressions = async () => {
     if (webcamRef.current && webcamRef.current.video.readyState === 4) {
       const video = webcamRef.current.video;
       const videoWidth = video.videoWidth;
       const videoHeight = video.videoHeight;
-  
-      // Set canvas dimensions to match video dimensions
+
       canvasRef.current.width = videoWidth;
       canvasRef.current.height = videoHeight;
-  
+
       try {
         const detections = await faceapi
           .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
           .withFaceExpressions();
-  
-        // Add null check here
+
         if (detections && detections.detection && detections.detection.box) {
           const { box } = detections.detection;
-          
           if (box.width && box.height) {
-            // Resize detections to match video size
             const resizedDetections = faceapi.resizeResults(detections, {
               width: videoWidth,
               height: videoHeight,
             });
-  
-            // Clear the canvas before drawing
+
             const context = canvasRef.current.getContext("2d");
             context.clearRect(0, 0, videoWidth, videoHeight);
-  
-            // Draw face detections, landmarks, and expressions on the canvas
+
             faceapi.draw.drawDetections(canvasRef.current, resizedDetections);
-            faceapi.draw.drawFaceExpressions(canvasRef.current, resizedDetections);
-  
-            // Update expressions state
+            faceapi.draw.drawFaceExpressions(
+              canvasRef.current,
+              resizedDetections
+            );
+
             setExpressions(detections.expressions);
           }
         }
@@ -112,7 +112,6 @@ const RecordAnswerSection = ({
       }
     }
   };
-  
 
   useEffect(() => {
     if (webcamActive && modelsLoaded) {
@@ -130,13 +129,10 @@ const RecordAnswerSection = ({
   };
 
   const updateUserAnswer = async () => {
-    // console.log(userAnswer);
     setLoading(true);
 
-    // Generate the facial feedback based on emotions only if the webcam is active
     let emotionFeedback = "";
     if (webcamActive) {
-      // console.log(expressions);
       emotionFeedback = generateEmotionFeedback(expressions);
     } else {
       emotionFeedback = "Webcam is not active; no facial feedback available.";
@@ -159,50 +155,44 @@ const RecordAnswerSection = ({
        }`;
 
     const result = await chatSession.sendMessage(feedback);
-    // console.log(result);
     const MockResponse = await result.response.text();
 
-    // Replace backticks and escape any problematic characters
     const sanitizedResponse = MockResponse.replace("```json", "")
       .replace("```", "")
       .replace("* **", "")
       .replace("**", "")
       .replace("*", "")
-      .replace(/[\u0000-\u001F\u007F-\u009F]/g, ""); // Remove control characters
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
 
     try {
       const JSONFeedbackResp = JSON.parse(sanitizedResponse);
-      // console.log(JSONFeedbackResp);
 
       const userEmail = user?.primaryEmailAddress?.emailAddress;
       const question = mockInterviewQuestions[activeQuestionIndex]?.question;
       const mockIdRef = interviewData.mockId;
 
-      // Check if the answer already exists with explicit where clauses
       const existingAnswers = await db
         .select()
         .from(UserAnswers)
         .where(eq(UserAnswers.mockIdRef, mockIdRef))
         .where(eq(UserAnswers.userEmail, userEmail))
-        .where(eq(UserAnswers.question, question)); // Ensure question matches
+        .where(eq(UserAnswers.question, question));
 
       if (existingAnswers.length > 0) {
-        // Remove the previous answer matching mockIdRef, userEmail, and question
         await db
           .delete(UserAnswers)
           .where(eq(UserAnswers.mockIdRef, mockIdRef))
           .where(eq(UserAnswers.userEmail, userEmail))
-          .where(eq(UserAnswers.question, question)); // Delete only the matching question
+          .where(eq(UserAnswers.question, question));
       }
 
-      // Insert new answer
       const resp = await db.insert(UserAnswers).values({
         mockIdRef,
         question,
         correctAns: mockInterviewQuestions[activeQuestionIndex]?.answer,
         userAns: userAnswer,
         rating: JSONFeedbackResp.rating,
-        feedback: JSONFeedbackResp.feedback + " " + emotionFeedback, // Add emotion feedback here
+        feedback: JSONFeedbackResp.feedback + " " + emotionFeedback,
         userEmail,
         createdAt: moment().format("DD-MM-yyyy"),
       });
@@ -229,7 +219,6 @@ const RecordAnswerSection = ({
     }
   };
 
-  // Function to generate facial feedback based on detected emotions
   const generateEmotionFeedback = (expressions) => {
     let feedback = "";
 
@@ -268,7 +257,7 @@ const RecordAnswerSection = ({
           ref={webcamRef}
           mirrored={true}
           style={{
-            zIndex: 1, // Ensure webcam is at a lower z-index
+            zIndex: 1,
             height: 300,
             width: "100%",
             position: "relative",
@@ -279,8 +268,8 @@ const RecordAnswerSection = ({
         <canvas
           ref={canvasRef}
           style={{
-            position: "absolute", // Ensure canvas is directly on top of the video
-            zIndex: 2, // Canvas should be above the webcam video
+            position: "absolute",
+            zIndex: 2,
             height: 300,
             width: "100%",
           }}
@@ -288,13 +277,13 @@ const RecordAnswerSection = ({
       </div>
       <Button variant="outline" className="my-10" onClick={StartStopRecording}>
         {isRecording ? (
-          <h2 className="text-red-600 font-semibold items-center flex gap-2">
-            <MicOff /> Stop Recording
-          </h2>
+          <div className="text-red-600 font-semibold flex items-center justify-center gap-2">
+            <MicOff className="w-4 h-4 mr-2" /> Stop Recording
+          </div>
         ) : (
-          <h2 className="text-primary font-semibold items-center flex gap-2">
-            <Mic /> Start Recording
-          </h2>
+          <div className="text-primary font-semibold flex items-center justify-center gap-2">
+            <Mic className="w-4 h-4 mr-2" /> Start Recording
+          </div>
         )}
       </Button>
     </div>

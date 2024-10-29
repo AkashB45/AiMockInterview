@@ -10,7 +10,7 @@ const header = () => {
   const path = usePathname();
   const router = useRouter();
   useEffect(() => {
-    console.log(path)
+    // console.log(path)
   }, [path])
   return (
     <div className='flex p-4 justify-between bg-secondary shadow-sm '>

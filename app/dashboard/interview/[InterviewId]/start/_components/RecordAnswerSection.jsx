@@ -14,6 +14,7 @@ import { useUser } from "@clerk/nextjs";
 import moment from "moment";
 import { eq } from "drizzle-orm";
 import * as faceapi from "face-api.js";
+import _ from 'lodash';
 
 const RecordAnswerSection = ({
   mockInterviewQuestions,
@@ -55,16 +56,31 @@ const RecordAnswerSection = ({
   }, []);
 
   // Update userAnswer without repeating phrases
+
   useEffect(() => {
     if (results.length > 0) {
       const latestTranscript = results[results.length - 1]?.transcript || "";
-      setUserAnswer((prevAns) => {
-        return prevAns.endsWith(latestTranscript)
-          ? prevAns
-          : prevAns + latestTranscript;
+  
+      // Split the current answer into sentences
+      const currentSentences = userAnswer.split('.').map(sentence => sentence.trim()).filter(Boolean);
+  
+      // Split the latest transcript into sentences
+      const newSentences = latestTranscript.split('.').map(sentence => sentence.trim()).filter(Boolean);
+  
+      // Use Lodash to create a unique array of sentences without duplicates
+      const uniqueSentences = _.uniq([...currentSentences, ...newSentences]);
+  
+      // Filter out any sentences that are too similar to the previous answer
+      const filteredSentences = uniqueSentences.filter(sentence => {
+        const pattern = new RegExp(`^${_.escapeRegExp(sentence)}$`, 'i'); // Regex to match the exact sentence ignoring case
+        return !currentSentences.some(currentSentence => pattern.test(currentSentence));
       });
+  
+      // Update userAnswer with the filtered unique sentences
+      setUserAnswer(filteredSentences.join('. ') + (filteredSentences.length > 0 ? '. ' : ''));
     }
   }, [results]);
+  
 
   useEffect(() => {
     if (!isRecording && userAnswer.length > 10) {

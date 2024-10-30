@@ -61,11 +61,13 @@ const RecordAnswerSection = ({
     setUserAnswer(newAnswer);  
    }, 500); // 500ms delay  
    
-   useEffect(() => {  
-    results.map((result) =>  
-     debouncedSetUserAnswer((prevAns) => prevAns + result?.transcript)  
-    );  
-   }, [results]); 
+   useEffect(() => {
+    const newText = results.reduce((acc, result) => acc + result.transcript, "");
+    if (!userAnswer.includes(newText)) {
+      debouncedSetUserAnswer(newText);
+    }
+  }, [results]);
+  
 
   
 

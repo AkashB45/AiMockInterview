@@ -25,6 +25,7 @@ const RecordAnswerSection = ({
   const [webcamActive, setWebcamActive] = useState(false);
   const [expressions, setExpressions] = useState({});
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [transcriptCache, setTranscriptCache] = useState(new Set())
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
   const { user } = useUser();
@@ -56,14 +57,15 @@ const RecordAnswerSection = ({
 
   // Update userAnswer without repeating phrases
   useEffect(() => {
-    if (results.length > 0) {
-      const latestTranscript = results[results.length - 1]?.transcript || "";
-      setUserAnswer((prevAns) => {
-        return prevAns.endsWith(latestTranscript)
-          ? prevAns
-          : prevAns + latestTranscript;
-      });
-    }
+    results.forEach((result) => {
+      const newTranscript = result.transcript.trim();
+      if (newTranscript && !transcriptCache.has(newTranscript)) {
+        setTranscriptCache((prevCache) =>
+          new Set(prevCache).add(newTranscript)
+        );
+        setUserAnswer((prevAns) => prevAns + " " + newTranscript);
+      }
+    });
   }, [results]);
 
   useEffect(() => {

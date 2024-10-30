@@ -14,8 +14,6 @@ import { useUser } from "@clerk/nextjs";
 import moment from "moment";
 import { eq } from "drizzle-orm";
 import * as faceapi from "face-api.js";
-import { debounce } from 'lodash';
-
 
 const RecordAnswerSection = ({
   mockInterviewQuestions,
@@ -56,20 +54,17 @@ const RecordAnswerSection = ({
     loadModels();
   }, []);
 
-  // Debounced setUserAnswer function  
-  const debouncedSetUserAnswer = debounce((newAnswer) => {  
-    setUserAnswer(newAnswer);  
-   }, 500); // 500ms delay  
-   
-   useEffect(() => {
-    const newText = results.reduce((acc, result) => acc + result.transcript, "");
-    if (!userAnswer.includes(newText)) {
-      debouncedSetUserAnswer(newText);
+  // Update userAnswer without repeating phrases
+  useEffect(() => {
+    if (results.length > 0) {
+      const latestTranscript = results[results.length - 1]?.transcript || "";
+      setUserAnswer((prevAns) => {
+        return prevAns.endsWith(latestTranscript)
+          ? prevAns
+          : prevAns + latestTranscript;
+      });
     }
   }, [results]);
-  
-
-  
 
   useEffect(() => {
     if (!isRecording && userAnswer.length > 10) {
@@ -280,10 +275,6 @@ const RecordAnswerSection = ({
           }}
         />
       </div>
-      {/* <div className="my-4 w-full p-4 space-y-2 bg-slate-100 rounded-lg">
-        <p className="text-lg font-semibold">Answer:</p>
-        <p className="text-base">{userAnswer || interimResult}</p>
-      </div> */}
       <Button variant="outline" className="my-10" onClick={StartStopRecording}>
         {isRecording ? (
           <div className="text-red-600 font-semibold flex items-center justify-center gap-2">

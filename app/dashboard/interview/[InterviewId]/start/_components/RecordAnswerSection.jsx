@@ -14,6 +14,8 @@ import { useUser } from "@clerk/nextjs";
 import moment from "moment";
 import { eq } from "drizzle-orm";
 import * as faceapi from "face-api.js";
+import { debounce } from 'lodash';
+
 
 const RecordAnswerSection = ({
   mockInterviewQuestions,
@@ -25,7 +27,6 @@ const RecordAnswerSection = ({
   const [webcamActive, setWebcamActive] = useState(false);
   const [expressions, setExpressions] = useState({});
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [transcriptCache, setTranscriptCache] = useState(new Set())
   const webcamRef = useRef(null);
   const canvasRef = useRef(null);
   const { user } = useUser();
@@ -55,18 +56,18 @@ const RecordAnswerSection = ({
     loadModels();
   }, []);
 
-  // Update userAnswer without repeating phrases
-  useEffect(() => {
-    results.forEach((result) => {
-      const newTranscript = result.transcript.trim();
-      if (newTranscript && !transcriptCache.has(newTranscript)) {
-        setTranscriptCache((prevCache) =>
-          new Set(prevCache).add(newTranscript)
-        );
-        setUserAnswer((prevAns) => prevAns + " " + newTranscript);
-      }
-    });
-  }, [results]);
+  // Debounced setUserAnswer function  
+  const debouncedSetUserAnswer = debounce((newAnswer) => {  
+    setUserAnswer(newAnswer);  
+   }, 500); // 500ms delay  
+   
+   useEffect(() => {  
+    results.map((result) =>  
+     debouncedSetUserAnswer((prevAns) => prevAns + result?.transcript)  
+    );  
+   }, [results]); 
+
+  
 
   useEffect(() => {
     if (!isRecording && userAnswer.length > 10) {
@@ -277,6 +278,10 @@ const RecordAnswerSection = ({
           }}
         />
       </div>
+      {/* <div className="my-4 w-full p-4 space-y-2 bg-slate-100 rounded-lg">
+        <p className="text-lg font-semibold">Answer:</p>
+        <p className="text-base">{userAnswer || interimResult}</p>
+      </div> */}
       <Button variant="outline" className="my-10" onClick={StartStopRecording}>
         {isRecording ? (
           <div className="text-red-600 font-semibold flex items-center justify-center gap-2">

@@ -65,7 +65,7 @@ export default function Home() {
         </div>
 
         {/* Footer */}
-        {/* <div className="absolute bottom-0 w-full bg-black bg-opacity-0 text-white py-4 z-10">
+         <div className="absolute bottom-0 w-full bg-black bg-opacity-0 text-white py-4 z-10">
           <div className="max-w-screen-xl mx-auto flex flex-col sm:flex-row justify-between items-center px-4 sm:px-6 lg:px-8">
             <div className="flex flex-wrap items-center gap-5">
               <a
@@ -105,7 +105,7 @@ export default function Home() {
               </a>
             </div>
           </div>
-        </div> */}
+        </div> 
       </section>
 
       <style jsx>{`

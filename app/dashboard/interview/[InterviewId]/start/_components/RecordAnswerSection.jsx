@@ -7,7 +7,7 @@ import React, { useEffect, useState, useRef } from "react";
 import useSpeechToText from "react-hook-speech-to-text";
 import Webcam from "react-webcam";
 import { toast } from "@/hooks/use-toast";
-import { chatSession } from "@/utils/GeminiAiModel";
+// Use server API route for generation
 import { db } from "@/utils/db";
 import { UserAnswers } from "@/utils/schema";
 import { useUser } from "@clerk/nextjs";
@@ -170,15 +170,93 @@ const RecordAnswerSection = ({
          "feedback": "<string incorporating user answer and facial feedback>"
        }`;
 
-    const result = await chatSession.sendMessage(feedback);
-    const MockResponse = await result.response.text();
+    // Call server API route (server-side uses the API key) with retries on 502/503
+    const callGenerate = async (prompt, attempts = 3) => {
+      let lastErr = null;
+      for (let i = 1; i <= attempts; i++) {
+        try {
+          const res = await fetch(`/api/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt }),
+          });
 
-    const sanitizedResponse = MockResponse.replace("```json", "")
-      .replace("```", "")
-      .replace("* **", "")
-      .replace("**", "")
-      .replace("*", "")
-      .replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+          if (res.ok) {
+            try { return { ok: true, data: await res.json() }; } catch(e){ return { ok: false, error: 'Invalid JSON from server' }; }
+          }
+
+          // parse error body if possible
+          let body;
+          try { body = await res.json(); } catch (e) { body = await res.text(); }
+
+          // Retry on transient server/unavailable responses
+          if (res.status === 502 || res.status === 503 || res.status === 504) {
+            lastErr = body || `Server ${res.status}`;
+            const delay = i * 1000;
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+
+          // Non-retryable error
+          return { ok: false, status: res.status, body };
+        } catch (err) {
+          lastErr = err;
+          const delay = i * 1000;
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+      return { ok: false, error: lastErr };
+    };
+
+    const genResp = await callGenerate(feedback, 3);
+    if (!genResp.ok) {
+      console.error('/api/generate failed after retries', genResp);
+      toast({ variant: 'destructive', title: 'AI Service Error', description: 'AI generation failed after retries. Please try again later.' });
+      setLoading(false);
+      return;
+    }
+
+    const data = genResp.data;
+    if (data?.error) {
+      console.error("/api/generate returned error:", data.error, data.models);
+      toast({ variant: "destructive", title: "AI Error", description: data.error });
+      setLoading(false);
+      return;
+    }
+
+    let MockResponse = (data?.output || "").toString();
+
+    // Try to extract JSON block (robust)
+    const extractJSONFromText = (text) => {
+      if (!text) return null;
+      const fenceMatch = text.match(/```json\s*([\s\S]*?)```/i);
+      if (fenceMatch && fenceMatch[1]) return fenceMatch[1].trim();
+      const startIdxObj = text.indexOf("{");
+      const startIdxArr = text.indexOf("[");
+      let startIdx = -1; let openChar=null; let closeChar=null;
+      if (startIdxObj === -1 && startIdxArr === -1) return null;
+      if (startIdxObj === -1) { startIdx = startIdxArr; openChar = '['; closeChar = ']'; }
+      else if (startIdxArr === -1) { startIdx = startIdxObj; openChar = '{'; closeChar = '}'; }
+      else { if (startIdxObj < startIdxArr) { startIdx = startIdxObj; openChar = '{'; closeChar = '}'; } else { startIdx = startIdxArr; openChar = '['; closeChar = ']'; } }
+      let depth = 0; let inString=false; let escaped=false;
+      for (let i = startIdx; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === "\\" && !escaped) { escaped = true; continue; }
+        if (ch === '"' && !escaped) inString = !inString;
+        if (!inString) { if (ch === openChar) depth++; else if (ch === closeChar) depth--; }
+        if (escaped) escaped = false;
+        if (depth === 0) return text.slice(startIdx, i+1).trim();
+      }
+      return null;
+    };
+
+    const extracted = extractJSONFromText(MockResponse);
+    let sanitizedResponse = "";
+    if (extracted) sanitizedResponse = extracted;
+    else sanitizedResponse = MockResponse.replace(/```json/i, "").replace(/```/g, "");
+
+    // Remove control chars but keep common punctuation and spaces
+    sanitizedResponse = sanitizedResponse.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
 
     try {
       const JSONFeedbackResp = JSON.parse(sanitizedResponse);

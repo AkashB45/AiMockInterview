@@ -18,8 +18,63 @@ const StartInterview = ({ params }) => {
       .select()
       .from(mockInterview)
       .where(eq(mockInterview.mockId, params.InterviewId));
-      const jsonMockUp = await JSON.parse(result[0].jsonMockRep);
-       setMockInterviewQuestions(jsonMockUp);
+      const raw = result[0].jsonMockRep;
+      const extractJSONFromText = (text) => {
+        if (!text) return null;
+        const fenceMatch = text.match(/```json\s*([\s\S]*?)```/i);
+        if (fenceMatch && fenceMatch[1]) return fenceMatch[1].trim();
+        const startIdxObj = text.indexOf("{");
+        const startIdxArr = text.indexOf("[");
+        let startIdx = -1;
+        let openChar = null;
+        let closeChar = null;
+        if (startIdxObj === -1 && startIdxArr === -1) return null;
+        if (startIdxObj === -1) {
+          startIdx = startIdxArr; openChar = "["; closeChar = "]";
+        } else if (startIdxArr === -1) {
+          startIdx = startIdxObj; openChar = "{"; closeChar = "}";
+        } else {
+          if (startIdxObj < startIdxArr) { startIdx = startIdxObj; openChar = "{"; closeChar = "}"; }
+          else { startIdx = startIdxArr; openChar = "["; closeChar = "]"; }
+        }
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+        for (let i = startIdx; i < text.length; i++) {
+          const ch = text[i];
+          if (ch === "\\" && !escaped) { escaped = true; continue; }
+          if (ch === '"' && !escaped) inString = !inString;
+          if (!inString) {
+            if (ch === openChar) depth++;
+            else if (ch === closeChar) depth--;
+          }
+          if (escaped) escaped = false;
+          if (depth === 0) {
+            return text.slice(startIdx, i + 1).trim();
+          }
+        }
+        return null;
+      };
+
+      let jsonMockUp;
+      try {
+        jsonMockUp = JSON.parse(raw);
+      } catch (err) {
+        // Attempt to extract JSON portion and parse
+        const extracted = extractJSONFromText(raw);
+        if (extracted) {
+          try {
+            jsonMockUp = JSON.parse(extracted);
+          } catch (err2) {
+            console.error("Failed to parse extracted JSON", err2);
+            jsonMockUp = [];
+          }
+        } else {
+          console.error("Failed to parse JSON and no extractable JSON found", err);
+          jsonMockUp = [];
+        }
+      }
+      setMockInterviewQuestions(jsonMockUp);
       // console.log(mockInterviewQuestions);
     setInterviewData(result[0]);
   };
